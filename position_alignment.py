@@ -23,7 +23,7 @@ def load_pos_data(filename):
     return data, posX, posY, redX, redY
 
 # find intersecting coordinates between 2 camera position
-def intersect_coords(posX1, posY1, posX2, posY2):
+def find_intersect_coords(posX1, posY1, posX2, posY2):
     max_length = max(len(cam3_posX),len(cam4_posX))
     if len(posX1)==max_length:
         posX2 = np.append(posX2, [-1]*(max_length - len(posX2)))
@@ -62,41 +62,35 @@ def create_src_dst_points(srcptX, srcptY, dstptX, dstptY):
     return pts_src, pts_dst
 
 # get perspective transformed data
-def transformed_coords(c1_coords_c, c2_coords_c, c1_coords):
-    # Calculate Homography
+def get_transformed_coords(c1_posX, c1_posY, c2_posX, c2_posY):
+    # find preprocessed and intersecting coordinates bw 2 cameras
+    intersect_coords = find_intersect_coords(c1_posX, c1_posY, c2_posX, c2_posY)
+    c1_posX_c = intersect_coords['posX1_c']
+    c1_posY_c = intersect_coords['posY1_c']
+    c2_posX_c = intersect_coords['posX2_c']
+    c2_posY_c = intersect_coords['posY2_c']
+    # create the compatible pos coordinates data format for a single camera that needs to be transformed
+    c1_coords = create_compatible_array(c1_posX, c1_posY)
+    # create source and destination use to calculate homography
+    c1_coords_c, c2_coords_c = create_src_dst_points(c1_posX_c, c1_posY_c, c2_posX_c, c2_posY_c)
+    # find the transformed coordinates
     hg, status = cv2.findHomography(c1_coords_c, c2_coords_c)
     # perform perspective transformation
     c1_coords_t = cv2.perspectiveTransform(np.array([c1_coords]), hg)[0]
     # return the homography, trasnformed coordinates
-    return hg, c1_coords_t
+    return intersect_coords, hg, c1_coords_t
 
 # load the position data
 _, cam4_posX, cam4_posY, _, _ = load_pos_data('cam3_Pos.mat')
 _, cam3_posX, cam3_posY, _, _ = load_pos_data('cam2_Pos.mat')
-
-#quick HACK for reflection
-#cam4_posY[cam4_posY>=440] = cam4_posY[cam4_posY>=440] - 25
 
 plt.figure(1)
 plt.scatter(cam4_posX, cam4_posY, s=1)
 plt.scatter(cam3_posX+400, cam3_posY, s=1)
 plt.show()
 
-# find preprocessed and intersecting coordinates bw 2 cameras
-preprocessed_data = intersect_coords(cam3_posX, cam3_posY, cam4_posX, cam4_posY)
-# common x,y coordinates
-cam3_posX_c = preprocessed_data['posX1_c']
-cam3_posY_c = preprocessed_data['posY1_c']
-cam4_posX_c = preprocessed_data['posX2_c']
-cam4_posY_c = preprocessed_data['posY2_c']
-
-# create source and destination use to calculate homography
-cam3_coords_c, cam4_coords_c = create_src_dst_points(cam3_posX_c, cam3_posY_c, cam4_posX_c, cam4_posY_c)
-# create the compatible pos coordinates for a single camera that needs to be transformed 
-cam3_coords = create_compatible_array(cam3_posX, cam3_posY)
-# find the transformed coordinates
-hg_c3c4, cam3_coords_t = transformed_coords(cam3_coords_c, cam4_coords_c, cam3_coords)
-    
+# find the homography and transformed coordinates
+common_coords_c3c4, hg_c3c4, cam3_coords_t = get_transformed_coords(cam3_posX, cam3_posY, cam4_posX, cam4_posY)    
 # transformed points
 cam3_posX_T = cam3_coords_t[:,0]
 cam3_posY_t = cam3_coords_t[:,1]
