@@ -12,7 +12,8 @@ import numpy as np
 import scipy.io as scsio
 import matplotlib.pyplot as plt
 
-# load the position data
+
+# load the position data from mat file
 def load_pos_data(filename):
     data = scsio.loadmat(filename)
     posX = data['pos_x'][0]
@@ -46,25 +47,39 @@ def intersect_coords(posX1, posY1, posX2, posY2):
     # return the length adjusted position and indices
     return data
 
+# function to create compatible array
+def create_compatible_array(posX, posY):
+    pts_ = []
+    for x1,y1 in zip(posX, posY):
+        pts_.append([x1,y1])
+    # convert them to float32 datatype
+    return np.array(pts_, dtype=np.float32)
+
 # funtions to generate the arrays to calculate homography
 def create_src_dst_points(srcptX, srcptY, dstptX, dstptY):
-    pts_src = []
-    pts_dst = []
-    for x1,y1,x2,y2 in zip(srcptX, srcptY, dstptX, dstptY):
-        pts_src.append([x1,y1])
-        pts_dst.append([x2,y2])
-    return np.array(pts_src), np.array(pts_dst)
+    pts_src = create_compatible_array(srcptX, srcptY)
+    pts_dst = create_compatible_array(dstptX, dstptY)
+    return pts_src, pts_dst
+
+# get perspective transformed data
+def transformed_coords(c1_coords_c, c2_coords_c, c1_coords):
+    # Calculate Homography
+    hg, status = cv2.findHomography(c1_coords_c, c2_coords_c)
+    # perform perspective transformation
+    c1_coords_t = cv2.perspectiveTransform(np.array([c1_coords]), hg)[0]
+    # return the homography, trasnformed coordinates
+    return hg, c1_coords_t
 
 # load the position data
-_, cam4_posX, cam4_posY, _, _ = load_pos_data('cam4_Pos.mat')
-_, cam3_posX, cam3_posY, _, _ = load_pos_data('cam3_Pos.mat')
+_, cam4_posX, cam4_posY, _, _ = load_pos_data('cam3_Pos.mat')
+_, cam3_posX, cam3_posY, _, _ = load_pos_data('cam2_Pos.mat')
 
 #quick HACK for reflection
-cam4_posY[cam4_posY>=440] = cam4_posY[cam4_posY>=440] - 25
+#cam4_posY[cam4_posY>=440] = cam4_posY[cam4_posY>=440] - 25
 
 plt.figure(1)
-plt.scatter(cam4_posX, cam4_posY, c='b', s=1)
-plt.scatter(cam3_posX+440, cam3_posY, c='r', s=1)
+plt.scatter(cam4_posX, cam4_posY, s=1)
+plt.scatter(cam3_posX+400, cam3_posY, s=1)
 plt.show()
 
 # find preprocessed and intersecting coordinates bw 2 cameras
@@ -75,20 +90,18 @@ cam3_posY_c = preprocessed_data['posY1_c']
 cam4_posX_c = preprocessed_data['posX2_c']
 cam4_posY_c = preprocessed_data['posY2_c']
 
+# create source and destination use to calculate homography
+cam3_coords_c, cam4_coords_c = create_src_dst_points(cam3_posX_c, cam3_posY_c, cam4_posX_c, cam4_posY_c)
+# create the compatible pos coordinates for a single camera that needs to be transformed 
+cam3_coords = create_compatible_array(cam3_posX, cam3_posY)
+# find the transformed coordinates
+hg_c3c4, cam3_coords_t = transformed_coords(cam3_coords_c, cam4_coords_c, cam3_coords)
+    
+# transformed points
+cam3_posX_T = cam3_coords_t[:,0]
+cam3_posY_t = cam3_coords_t[:,1]
+
 plt.figure(2)
-plt.scatter(cam4_posX_c, cam4_posY_c, c='b', s=1)
-plt.scatter(cam3_posX_c+440, cam3_posY_c, c='r', s=1)
+plt.scatter(cam4_posX, cam4_posY, s=1)
+plt.scatter(cam3_posX_T, cam3_posY_t, s=1)
 plt.show()
-
-# coordinates used to calculate the homography
-cam3_coords, cam4_coords = create_src_dst_points(cam3_posX_c, cam3_posY_c, cam4_posX_c, cam4_posY_c)
-
-# Calculate Homography
-h, status = cv2.findHomography(cam3_coords, cam4_coords)
-
-
-# TODO
-# add method to transform second camera coordinates to first camera reference frame
- 
-## Warp source image to destination based on homography
-#im_out = cv2.warpPerspective(im_src, h, (im_dst.shape[1],im_dst.shape[0]))
