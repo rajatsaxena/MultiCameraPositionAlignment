@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 import scipy.io as scsio
 import matplotlib.pyplot as plt
+from skimage.transform import AffineTransform
+from skimage.measure import ransac
 
 # load the position data from mat file
 def load_pos_data(filename, loadRedPos):
@@ -72,6 +74,15 @@ def create_src_dst_points(srcptX, srcptY, dstptX, dstptY):
     pts_dst = create_compatible_array(dstptX, dstptY)
     return pts_src, pts_dst
 
+# function to find inliers using ransac algorithm
+def find_inliers(src, dst):
+    # affine transform
+    model = AffineTransform()
+    model.estimate(src, dst)
+    # robustly estimate affine transform model with RANSAC
+    model_robust, inliers = ransac((src, dst), AffineTransform, min_samples=3,residual_threshold=2, max_trials=100)
+    return inliers
+    
 # get perspective transformed data
 def get_transformed_coords(c1_posX, c1_posY, c2_posX, c2_posY, unocc_c1, unocc_c2):
     # find preprocessed and intersecting coordinates bw 2 cameras
@@ -93,6 +104,8 @@ def get_transformed_coords(c1_posX, c1_posY, c2_posX, c2_posY, unocc_c1, unocc_c
     c1_coords = create_compatible_array(c1_posX, c1_posY)
     # create source and destination use to calculate homography
     c1_coords_c, c2_coords_c = create_src_dst_points(c1_posX_c, c1_posY_c, c2_posX_c, c2_posY_c)
+    # get inliers using ransac algorithm
+    intersect_coords['inliers'] = find_inliers(c1_coords_c, c2_coords_c)
     # find the transformed coordinates
     hg, status = cv2.findHomography(c1_coords_c, c2_coords_c)
     # perform perspective transformation
@@ -187,8 +200,8 @@ plt.title('cam1, cam2 and cam3')
 plt.show()
     
 plt.figure(3)
-plt.scatter(merged_cam123_posX, -merged_cam123_posY, s=1)
-plt.scatter(cam4_posX_t, -cam4_posY_t, s=1)
-plt.scatter(merged_cam1234_posX, -merged_cam1234_posY, s=1)
+plt.scatter(merged_cam123_posX, merged_cam123_posY, s=1)
+plt.scatter(cam4_posX_t, cam4_posY_t, s=1)
+plt.scatter(merged_cam1234_posX, merged_cam1234_posY, s=1)
 plt.title('cam1, cam2, cam3 and cam4')
 plt.show()
