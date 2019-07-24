@@ -205,3 +205,73 @@ plt.scatter(cam4_posX_t, cam4_posY_t, s=1)
 plt.scatter(merged_cam1234_posX, merged_cam1234_posY, s=1)
 plt.title('cam1, cam2, cam3 and cam4')
 plt.show()
+
+
+# all camera posiiton filename
+cam5_pos_filename = 'cam5_Pos.mat'
+cam6_pos_filename = 'cam6_Pos.mat'
+cam7_pos_filename = 'cam7_Pos.mat'
+cam8_pos_filename = 'cam8_Pos.mat'
+
+# load the position data for each camera 
+_, cam5_posX, cam5_posY, _, _ = load_pos_data(cam5_pos_filename, True)
+_, cam6_posX, cam6_posY, _, _ = load_pos_data(cam6_pos_filename, False)
+_, cam7_posX, cam7_posY, _, _ = load_pos_data(cam7_pos_filename, False)    
+_, cam8_posX, cam8_posY, _, _ = load_pos_data(cam8_pos_filename, False)
+
+# get the trasnformed data, homography matrix and matching vertices
+common_coords_c6c7, hg_c6c7, cam6_posX_t, cam6_posY_t, cam7_posX, cam7_posY, merged_cam67_posX, merged_cam67_posY = get_merged_pos_2cams(cam6_posX, cam6_posY, cam7_posX, cam7_posY)
+common_coords_c5c6c7, hg_c5c6c7, cam5_posX_t, cam5_posY_t, merged_cam67_posX, merged_cam67_posY, merged_cam567_posX, merged_cam567_posY = get_merged_pos_2cams(cam5_posX, cam5_posY, merged_cam67_posX, merged_cam67_posY)
+common_coords_c5c6c7c8, hg_c5c6c7c8, cam8_posX_t, cam8_posY_t, merged_cam567_posX, merged_cam567_posY, merged_cam5678_posX, merged_cam5678_posY = get_merged_pos_2cams(cam8_posX, cam8_posY, merged_cam567_posX, merged_cam567_posY)
+
+# hold the homogrpahy dictionary
+hg = {}
+hg['cam6cam7'] = hg_c6c7
+hg['cam5cam6cam7'] = hg_c5c6c7
+hg['cam5cam6cam7cam8'] = hg_c5c6c7c8
+
+# hold the common coordinate information
+common_coords = {}
+common_coords['cam6cam7'] = common_coords_c6c7
+common_coords['cam5cam6cam7'] = common_coords_c5c6c7
+common_coords['cam5cam6cam7cam8'] = common_coords_c5c6c7c8
+
+# dict to hold the transformed coordinates
+transformed_coords = {}
+transformed_coords['cam5_posX'] = cam5_posX_t
+transformed_coords['cam5_posY'] = cam5_posY_t
+transformed_coords['cam6_posX'] = cam6_posX_t
+transformed_coords['cam6_posY'] = cam6_posY_t
+transformed_coords['cam8_posX'] = cam8_posX_t
+transformed_coords['cam8_posY'] = cam8_posY_t
+
+# dictionary to hold the merged coordinates
+merged_coords = {}
+merged_coords['cam6_cam7_posX'] = merged_cam67_posX
+merged_coords['cam6_cam7_posY'] = merged_cam67_posY
+merged_coords['cam5_cam6_cam7_posX'] = merged_cam567_posX
+merged_coords['cam5_cam6_cam7_posY'] = merged_cam567_posY
+merged_coords['cam5_cam6_cam7_cam8_posX'] = merged_cam5678_posX
+merged_coords['cam5_cam6_cam7_cam8_posY'] = merged_cam5678_posY
+
+# plot the processed data
+plt.figure(4)
+plt.scatter(cam7_posX, cam7_posY, s=1)
+plt.scatter(cam6_posX_t, cam6_posY_t, s=1)
+plt.scatter(merged_cam67_posX, merged_cam67_posY, s=1)
+plt.title('cam6 and cam7')
+plt.show()
+
+plt.figure(5)
+plt.scatter(merged_cam67_posX, merged_cam67_posY, s=1)
+plt.scatter(cam5_posX_t, cam5_posY_t, s=1)
+plt.scatter(merged_cam567_posX, merged_cam567_posY, s=1)
+plt.title('cam5, cam6 and cam7')
+plt.show()
+
+plt.figure(6)
+plt.scatter(merged_cam567_posX, merged_cam567_posY, s=1)
+plt.scatter(cam8_posX_t, cam8_posY_t, s=1)
+plt.scatter(merged_cam5678_posX, merged_cam5678_posY, s=1)
+plt.title('cam5, cam6, cam7 and cam8')
+plt.show()
