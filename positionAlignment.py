@@ -130,7 +130,8 @@ def get_merged_pos_2cams(camA_posX, camA_posY, camB_posX, camB_posY):
     unocc_cA = np.where(camA_posX==-1)[0]
     unocc_cB = np.where(camB_posX==-1)[0]    
     # find the homography and transformed coordinates
-    common_coords_cAcB, hg_cAcB, camA_posX_t, camA_posY_t, camB_posX, camB_posY = get_transformed_coords(camA_posX, camA_posY, camB_posX, camB_posY, unocc_cA, unocc_cB)
+    common_coords_cAcB, hg_cAcB, camA_posX_t, camA_posY_t, camB_posX, camB_posY \
+        = get_transformed_coords(camA_posX, camA_posY, camB_posX, camB_posY, unocc_cA, unocc_cB)
     merged_cam_posX = np.nanmean(np.transpose(np.vstack((camA_posX_t, camB_posX))), axis=1)
     merged_cam_posY = np.nanmean(np.transpose(np.vstack((camA_posY_t, camB_posY))), axis=1)   
     # set nan to -1 (not a good coding practice)
@@ -153,9 +154,12 @@ _, cam3_posX, cam3_posY, _, _ = load_pos_data(cam3_pos_filename, False)
 _, cam4_posX, cam4_posY, _, _ = load_pos_data(cam4_pos_filename, False)
 
 # get the trasnformed data, homography matrix and matching vertices
-common_coords_c2c3, hg_c2c3, cam2_posX_t, cam2_posY_t, cam3_posX, cam3_posY, merged_cam23_posX, merged_cam23_posY = get_merged_pos_2cams(cam2_posX, cam2_posY, cam3_posX, cam3_posY)
-common_coords_c1c2c3, hg_c1c2c3, cam1_posX_t, cam1_posY_t, merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY = get_merged_pos_2cams(cam1_posX, cam1_posY, merged_cam23_posX, merged_cam23_posY)
-common_coords_c1c2c3c4, hg_c1c2c3c4, cam4_posX_t, cam4_posY_t, merged_cam123_posX, merged_cam123_posY, merged_cam1234_posX, merged_cam1234_posY = get_merged_pos_2cams(cam4_posX, cam4_posY, merged_cam123_posX, merged_cam123_posY)
+common_coords_c2c3, hg_c2c3, cam2_posX_t, cam2_posY_t, cam3_posX, cam3_posY, merged_cam23_posX,\
+         merged_cam23_posY = get_merged_pos_2cams(cam2_posX, cam2_posY, cam3_posX, cam3_posY)
+common_coords_c1c2c3, hg_c1c2c3, cam1_posX_t, cam1_posY_t, merged_cam23_posX, merged_cam23_posY,\
+         merged_cam123_posX, merged_cam123_posY = get_merged_pos_2cams(cam1_posX, cam1_posY, merged_cam23_posX, merged_cam23_posY)
+common_coords_c1c2c3c4, hg_c1c2c3c4, cam4_posX_t, cam4_posY_t, merged_cam123_posX, merged_cam123_posY,\
+         merged_cam1234_posX, merged_cam1234_posY = get_merged_pos_2cams(cam4_posX, cam4_posY, merged_cam123_posX, merged_cam123_posY)
 
 
 # hold the homogrpahy dictionary
@@ -220,8 +224,8 @@ plt.show()
 
 del hg_c2c3, hg_c1c2c3, hg_c1c2c3c4
 del common_coords_c2c3, common_coords_c1c2c3, common_coords_c1c2c3c4
-del cam1_posX_t, cam1_posY_t, cam2_posX_t, cam2_posY_t, cam4_posX_t, cam4_posY_t
-del merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY
+#del cam1_posX_t, cam1_posY_t, cam2_posX_t, cam2_posY_t, cam4_posX_t, cam4_posY_t
+#del merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY
 
 
 # all camera posiiton filename
@@ -306,14 +310,25 @@ plt.show()
 
 del hg_c6c7, hg_c5c6c7, hg_c5c6c7c8
 del common_coords_c6c7, common_coords_c5c6c7, common_coords_c5c6c7c8
-del cam5_posX_t, cam5_posY_t, cam6_posX_t, cam6_posY_t, cam8_posX_t, cam8_posY_t
-del merged_cam67_posX, merged_cam67_posY, merged_cam567_posX, merged_cam567_posY
-
 
 # run stitching on merged cam1234 and merged cam5678 to merge all the cameras
 common_coords_allcams, hg_allcams, merged_cam1234_posX_t, merged_cam1234_posY_t, \
 merged_cam5678_posX, merged_cam5678_posY, merged_allcams_posX, merged_allcams_posY = \
 get_merged_pos_2cams(merged_cam1234_posX, merged_cam1234_posY, merged_cam5678_posX, merged_cam5678_posY)
+
+# homography between left vs right half
+hg['cam14cam58'] = hg_allcams
+
+# hold the common coordinate information
+common_coords['cam14cam58'] = common_coords_allcams
+
+# dictionary to hold the merged coordinates
+merged_coords['cam1234_posX_t'] = merged_cam1234_posX_t
+merged_coords['cam1234_posY_t'] = merged_cam1234_posY_t
+merged_coords['cam5678_posX'] = merged_cam5678_posX
+merged_coords['cam5678_posY'] = merged_cam5678_posY
+merged_coords['cam14cam58_posX'] = merged_allcams_posX
+merged_coords['cam14cam58_posY'] = merged_allcams_posY
 
 # plot all the merged camera
 plt.figure(9)
@@ -322,3 +337,6 @@ plt.scatter(merged_cam5678_posX, merged_cam5678_posY, s=1)
 plt.scatter(merged_allcams_posX, merged_allcams_posY, s=1)
 plt.title('All cameras merged')
 plt.show()
+
+scsio.savemat('CombinedPosData.mat', mdict={'homography_mat':hg, 'common_coords':common_coords, 'transformed_coords':transformed_coords,\
+                                            'merged_coords':merged_coords})
