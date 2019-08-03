@@ -10,8 +10,6 @@ import cv2
 import numpy as np
 import scipy.io as scsio
 import matplotlib.pyplot as plt
-from skimage.transform import AffineTransform
-from skimage.measure import ransac
 
 # load the position data from mat file
 def load_pos_data(filename, loadRedPos):
@@ -23,7 +21,7 @@ def load_pos_data(filename, loadRedPos):
         redY = data['red_y'][0]
         return data, redX, redY, posX, posY
     else:
-        return data, posX, posY, np.nan, np.nan
+        return data, np.array(posX, dtype=np.float32), np.array(posY, dtype=np.float32), np.nan, np.nan
 
 # function to get length matched
 def get_length_adjusted(posX1, posY1, posX2, posY2):
@@ -40,26 +38,6 @@ def get_length_adjusted(posX1, posY1, posX2, posY2):
     posY2 = np.array(posY2, dtype=np.float32)
     return posX1, posY1, posX2, posY2
         
-# find intersecting coordinates between 2 camera position
-def find_intersect_coords(posX1, posY1, posX2, posY2):
-    # find lengt adjusted coords
-    posX1, posY1, posX2, posY2 = get_length_adjusted(posX1, posY1, posX2, posY2)
-    # return common indices
-    indices = np.where((posX1!=-1) & (posY1!=-1) & (posX2!=-1) & (posY2!=-1))[0]
-    # merged dictionary
-    data = {}
-    data['posX1'] = posX1
-    data['posY1'] = posY1
-    data['posX2'] = posX2
-    data['posY2'] = posY2
-    data['common_ind'] = indices
-    data['posX1_c'] = posX1[indices]
-    data['posY1_c'] = posY1[indices]
-    data['posX2_c'] = posX2[indices]
-    data['posY2_c'] = posY2[indices]
-    # return the length adjusted position and indices
-    return data
-
 # function to create compatible array
 def create_compatible_array(posX, posY):
     pts_ = []
@@ -68,51 +46,12 @@ def create_compatible_array(posX, posY):
     # convert them to float32 datatype
     return np.array(pts_, dtype=np.float32)
 
-# funtions to generate the arrays to calculate homography
-def create_src_dst_points(srcptX, srcptY, dstptX, dstptY):
-    pts_src = create_compatible_array(srcptX, srcptY)
-    pts_dst = create_compatible_array(dstptX, dstptY)
-    return pts_src, pts_dst
-
-# function to find inliers using ransac algorithm
-def find_inliers(src, dst):
-    # affine transform
-    model = AffineTransform()
-    model.estimate(src, dst)
-    # robustly estimate affine transform model with RANSAC
-    model_robust, inliers = ransac((src, dst), AffineTransform, min_samples=3,residual_threshold=2, max_trials=100)
-    return inliers
-    
 # get perspective transformed data
-def get_transformed_coords(c1_posX, c1_posY, c2_posX, c2_posY, unocc_c1, unocc_c2):
-    # find preprocessed and intersecting coordinates bw 2 cameras
-    intersect_coords = find_intersect_coords(c1_posX, c1_posY, c2_posX, c2_posY)
-    c1_posX_c = intersect_coords['posX1_c']
-    c1_posY_c = intersect_coords['posY1_c']
-    c2_posX_c = intersect_coords['posX2_c']
-    c2_posY_c = intersect_coords['posY2_c']
-    # change -1 to nan
-    c1_posX = intersect_coords['posX1']
-    c1_posY = intersect_coords['posY1']
-    c2_posX = intersect_coords['posX2']
-    c2_posY = intersect_coords['posY2']
-    c1_posX[c1_posX==-1] = np.nan
-    c1_posY[c1_posY==-1] = np.nan
-    c2_posX[c2_posX==-1] = np.nan
-    c2_posY[c2_posY==-1] = np.nan
-    # create the compatible pos coordinates data format for a single camera that needs to be transformed
+def get_transformed_coords_v2(c1_posX, c1_posY, c2_posX, c2_posY, unocc_c1, unocc_c2, hg_cAcB):
+     # create the compatible pos coordinates data format for a single camera that needs to be transformed
     c1_coords = create_compatible_array(c1_posX, c1_posY)
-    # create source and destination use to calculate homography
-    c1_coords_c, c2_coords_c = create_src_dst_points(c1_posX_c, c1_posY_c, c2_posX_c, c2_posY_c)
-    # get inliers using ransac algorithm
-    inliers = find_inliers(c1_coords_c, c2_coords_c)
-    intersect_coords['inliers'] = inliers
-    c1_coords_c = c1_coords_c[inliers]
-    c2_coords_c = c2_coords_c[inliers]
-    # find the transformed coordinates
-    hg, status = cv2.findHomography(c1_coords_c, c2_coords_c)
     # perform perspective transformation
-    c1_coords_t = cv2.perspectiveTransform(np.array([c1_coords]), hg)[0]
+    c1_coords_t = cv2.perspectiveTransform(np.array([c1_coords]), hg_cAcB)[0]
     # transformed points
     c1_posX_t = c1_coords_t[:,0]
     c1_posY_t = c1_coords_t[:,1]
@@ -122,57 +61,57 @@ def get_transformed_coords(c1_posX, c1_posY, c2_posX, c2_posY, unocc_c1, unocc_c
     c2_posX[unocc_c2] = np.nan
     c2_posY[unocc_c2] = np.nan
     # return the homography, transformed coordinates
-    return intersect_coords, hg, c1_posX_t, c1_posY_t, c2_posX, c2_posY
+    return c1_posX_t, c1_posY_t, c2_posX, c2_posY
 
-# funtion to get 2 camera merged positions
-def get_merged_pos_2cams(camA_posX, camA_posY, camB_posX, camB_posY):
+# function to get reloaded camera positions
+def get_merged_cams(camA_posX, camA_posY, camB_posX, camB_posY, hg_cAcB):
+    # find lengt adjusted coords
+    camA_posX, camA_posY, camB_posX, camB_posY = get_length_adjusted(camA_posX, camA_posY, camB_posX, camB_posY)
     # find unoccupied pixels
     unocc_cA = np.where(camA_posX==-1)[0]
-    unocc_cB = np.where(camB_posX==-1)[0]    
-    # find the homography and transformed coordinates
-    common_coords_cAcB, hg_cAcB, camA_posX_t, camA_posY_t, camB_posX, camB_posY \
-        = get_transformed_coords(camA_posX, camA_posY, camB_posX, camB_posY, unocc_cA, unocc_cB)
+    unocc_cB = np.where(camB_posX==-1)[0]
+    # find the transformed coordinates
+    camA_posX_t, camA_posY_t, camB_posX, camB_posY \
+                = get_transformed_coords_v2(camA_posX, camA_posY, camB_posX, camB_posY, unocc_cA, unocc_cB, hg_cAcB)
     merged_cam_posX = np.nanmean(np.transpose(np.vstack((camA_posX_t, camB_posX))), axis=1)
     merged_cam_posY = np.nanmean(np.transpose(np.vstack((camA_posY_t, camB_posY))), axis=1)   
     # set nan to -1 (not a good coding practice)
     merged_cam_posX[np.isnan(merged_cam_posX)] = -1.
     merged_cam_posY[np.isnan(merged_cam_posY)] = -1.
     # return the merged cam position
-    return common_coords_cAcB, hg_cAcB, camA_posX_t, camA_posY_t, camB_posX, camB_posY, merged_cam_posX, merged_cam_posY
-
+    return camA_posX_t, camA_posY_t, camB_posX, camB_posY, merged_cam_posX, merged_cam_posY
 
 # all camera posiiton filename
 cam1_pos_filename = 'cam1_Pos.mat'
 cam2_pos_filename = 'cam2_Pos.mat'
 cam3_pos_filename = 'cam3_Pos.mat'
 cam4_pos_filename = 'cam4_Pos.mat'
+cam5_pos_filename = 'cam5_Pos.mat'
+cam6_pos_filename = 'cam6_Pos.mat'
+cam7_pos_filename = 'cam7_Pos.mat'
+cam8_pos_filename = 'cam8_Pos.mat'
 
 # load the position data for each camera 
 _, cam1_posX, cam1_posY, _, _ = load_pos_data(cam1_pos_filename, True)
 _, cam2_posX, cam2_posY, _, _ = load_pos_data(cam2_pos_filename, False)
 _, cam3_posX, cam3_posY, _, _ = load_pos_data(cam3_pos_filename, False)    
 _, cam4_posX, cam4_posY, _, _ = load_pos_data(cam4_pos_filename, False)
+_, cam5_posX, cam5_posY, _, _ = load_pos_data(cam5_pos_filename, True)
+_, cam6_posX, cam6_posY, _, _ = load_pos_data(cam6_pos_filename, False)
+_, cam7_posX, cam7_posY, _, _ = load_pos_data(cam7_pos_filename, False)    
+_, cam8_posX, cam8_posY, _, _ = load_pos_data(cam8_pos_filename, False)
 
-# get the trasnformed data, homography matrix and matching vertices
-common_coords_c2c3, hg_c2c3, cam2_posX_t, cam2_posY_t, cam3_posX, cam3_posY, merged_cam23_posX,\
-         merged_cam23_posY = get_merged_pos_2cams(cam2_posX, cam2_posY, cam3_posX, cam3_posY)
-common_coords_c1c2c3, hg_c1c2c3, cam1_posX_t, cam1_posY_t, merged_cam23_posX, merged_cam23_posY,\
-         merged_cam123_posX, merged_cam123_posY = get_merged_pos_2cams(cam1_posX, cam1_posY, merged_cam23_posX, merged_cam23_posY)
-common_coords_c1c2c3c4, hg_c1c2c3c4, cam4_posX_t, cam4_posY_t, merged_cam123_posX, merged_cam123_posY,\
-         merged_cam1234_posX, merged_cam1234_posY = get_merged_pos_2cams(cam4_posX, cam4_posY, merged_cam123_posX, merged_cam123_posY)
+# load the combined position data
+homography_d = np.load('homography.npy')
+homography_d = homography_d.item()
 
-
-# hold the homogrpahy dictionary
-hg = {}
-hg['cam2cam3'] = hg_c2c3
-hg['cam1cam2cam3'] = hg_c1c2c3
-hg['cam1cam2cam3cam4'] = hg_c1c2c3c4
-
-# hold the common coordinate information
-common_coords = {}
-common_coords['cam2cam3'] = common_coords_c2c3
-common_coords['cam1cam2cam3'] = common_coords_c1c2c3
-common_coords['cam1cam2cam3cam4'] = common_coords_c1c2c3c4
+# function to find merged cam2 and cam3 data
+cam2_posX_t, cam2_posY_t, cam3_posX, cam3_posY, merged_cam23_posX,\
+        merged_cam23_posY = get_merged_cams(cam2_posX, cam2_posY, cam3_posX, cam3_posY, homography_d['cam2cam3'])
+cam1_posX_t, cam1_posY_t, merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, \
+        merged_cam123_posY = get_merged_cams(cam1_posX, cam1_posY, merged_cam23_posX, merged_cam23_posY, homography_d['cam1cam2cam3'])
+cam4_posX_t, cam4_posY_t, merged_cam123_posX, merged_cam123_posY, merged_cam1234_posX, \
+        merged_cam1234_posY = get_merged_cams(cam4_posX, cam4_posY, merged_cam123_posX, merged_cam123_posY, homography_d['cam1cam2cam3cam4'])
 
 # dict to hold the transformed coordinates
 transformed_coords = {}
@@ -222,45 +161,13 @@ plt.scatter(cam4_posX_t, cam4_posY_t, s=1)
 plt.title('cam1, cam2, cam3 and cam4')
 plt.show()
 
-del hg_c2c3, hg_c1c2c3, hg_c1c2c3c4
-del common_coords_c2c3, common_coords_c1c2c3, common_coords_c1c2c3c4
-#del cam1_posX_t, cam1_posY_t, cam2_posX_t, cam2_posY_t, cam4_posX_t, cam4_posY_t
-#del merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY
-
-
-# all camera posiiton filename
-cam5_pos_filename = 'cam5_Pos.mat'
-cam6_pos_filename = 'cam6_Pos.mat'
-cam7_pos_filename = 'cam7_Pos.mat'
-cam8_pos_filename = 'cam8_Pos.mat'
-
-# load the position data for each camera 
-_, cam5_posX, cam5_posY, _, _ = load_pos_data(cam5_pos_filename, True)
-_, cam6_posX, cam6_posY, _, _ = load_pos_data(cam6_pos_filename, False)
-_, cam7_posX, cam7_posY, _, _ = load_pos_data(cam7_pos_filename, False)    
-_, cam8_posX, cam8_posY, _, _ = load_pos_data(cam8_pos_filename, False)
-
-
 # get the trasnformed data, homography matrix and matching vertices
-common_coords_c6c7, hg_c6c7, cam6_posX_t, cam6_posY_t, cam7_posX, \
-cam7_posY, merged_cam67_posX, merged_cam67_posY = get_merged_pos_2cams(cam6_posX, cam6_posY, cam7_posX, cam7_posY)
-
-common_coords_c5c6c7, hg_c5c6c7, cam5_posX_t, cam5_posY_t, merged_cam67_posX,\
- merged_cam67_posY, merged_cam567_posX, merged_cam567_posY = get_merged_pos_2cams(cam5_posX, cam5_posY, merged_cam67_posX, merged_cam67_posY)
-
-common_coords_c5c6c7c8, hg_c5c6c7c8, cam8_posX_t, cam8_posY_t, merged_cam567_posX,\
- merged_cam567_posY, merged_cam5678_posX, merged_cam5678_posY = get_merged_pos_2cams(cam8_posX, cam8_posY, merged_cam567_posX, merged_cam567_posY)
-
-
-# hold the homogrpahy dictionary
-hg['cam6cam7'] = hg_c6c7
-hg['cam5cam6cam7'] = hg_c5c6c7
-hg['cam5cam6cam7cam8'] = hg_c5c6c7c8
-
-# hold the common coordinate information
-common_coords['cam6cam7'] = common_coords_c6c7
-common_coords['cam5cam6cam7'] = common_coords_c5c6c7
-common_coords['cam5cam6cam7cam8'] = common_coords_c5c6c7c8
+cam6_posX_t, cam6_posY_t, cam7_posX, cam7_posY, merged_cam67_posX, merged_cam67_posY\
+         = get_merged_cams(cam6_posX, cam6_posY, cam7_posX, cam7_posY, homography_d['cam6cam7'])
+cam5_posX_t, cam5_posY_t, merged_cam67_posX, merged_cam67_posY, merged_cam567_posX, \
+        merged_cam567_posY = get_merged_cams(cam5_posX, cam5_posY, merged_cam67_posX, merged_cam67_posY, homography_d['cam5cam6cam7'])
+cam8_posX_t, cam8_posY_t, merged_cam567_posX, merged_cam567_posY, merged_cam5678_posX, \
+        merged_cam5678_posY = get_merged_cams(cam8_posX, cam8_posY, merged_cam567_posX, merged_cam567_posY, homography_d['cam5cam6cam7cam8'])
 
 # dict to hold the transformed coordinates
 transformed_coords['cam5_posX'] = cam5_posX_t
@@ -308,19 +215,10 @@ plt.scatter(cam8_posX_t, cam8_posY_t, s=1)
 plt.title('cam5, cam6, cam7 and cam8 transformed')
 plt.show()
 
-del hg_c6c7, hg_c5c6c7, hg_c5c6c7c8
-del common_coords_c6c7, common_coords_c5c6c7, common_coords_c5c6c7c8
-
 # run stitching on merged cam1234 and merged cam5678 to merge all the cameras
-common_coords_allcams, hg_allcams, merged_cam1234_posX_t, merged_cam1234_posY_t, \
-merged_cam5678_posX, merged_cam5678_posY, merged_allcams_posX, merged_allcams_posY = \
-get_merged_pos_2cams(merged_cam1234_posX, merged_cam1234_posY, merged_cam5678_posX, merged_cam5678_posY)
-
-# homography between left vs right half
-hg['cam14cam58'] = hg_allcams
-
-# hold the common coordinate information
-common_coords['cam14cam58'] = common_coords_allcams
+merged_cam1234_posX_t, merged_cam1234_posY_t, merged_cam5678_posX, merged_cam5678_posY, \
+    merged_allcams_posX, merged_allcams_posY = get_merged_cams(merged_cam1234_posX, merged_cam1234_posY, \
+                                                               merged_cam5678_posX, merged_cam5678_posY, homography_d['cam14cam58'])
 
 # dictionary to hold the merged coordinates
 merged_coords['cam1234_posX_t'] = merged_cam1234_posX_t
@@ -338,8 +236,5 @@ plt.scatter(merged_allcams_posX, merged_allcams_posY, s=1)
 plt.title('All cameras merged')
 plt.show()
 
-# save the data
-np.save('homography.npy', hg)
-np.save('common_coords.npy', common_coords)
 np.save('transformed_coords.npy', transformed_coords)
 np.save('merged_coords.npy', merged_coords)
