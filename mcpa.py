@@ -224,8 +224,8 @@ plt.show()
 
 del hg_c2c3, hg_c1c2c3, hg_c1c2c3c4
 del common_coords_c2c3, common_coords_c1c2c3, common_coords_c1c2c3c4
-#del cam1_posX_t, cam1_posY_t, cam2_posX_t, cam2_posY_t, cam4_posX_t, cam4_posY_t
-#del merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY
+del cam1_posX_t, cam1_posY_t, cam2_posX_t, cam2_posY_t, cam4_posX_t, cam4_posY_t
+del merged_cam23_posX, merged_cam23_posY, merged_cam123_posX, merged_cam123_posY
 
 
 # all camera posiiton filename
@@ -310,6 +310,9 @@ plt.show()
 
 del hg_c6c7, hg_c5c6c7, hg_c5c6c7c8
 del common_coords_c6c7, common_coords_c5c6c7, common_coords_c5c6c7c8
+del cam5_posX_t, cam5_posY_t, cam6_posX_t, cam6_posY_t, cam8_posX_t, cam8_posY_t
+del merged_cam67_posX, merged_cam67_posY, merged_cam567_posX, merged_cam567_posY
+
 
 # run stitching on merged cam1234 and merged cam5678 to merge all the cameras
 common_coords_allcams, hg_allcams, merged_cam1234_posX_t, merged_cam1234_posY_t, \
